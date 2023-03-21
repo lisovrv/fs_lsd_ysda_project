@@ -17,9 +17,11 @@ generator_loss:
   losses:
     - ${losses.GenAdversarialLoss}
     - ${losses.ReconstructionLoss}
+    - ${losses.IdentityPreservationLoss}
   coefs:
     - 1
     - 10
+    - 1
 
 discriminator_loss:
   _target_: faceswap.losses.FinalLoss

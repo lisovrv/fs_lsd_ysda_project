@@ -7,6 +7,8 @@ from PIL import Image
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 
+from AdaptiveWingLoss.utils.utils import get_preds_fromhm
+
 
 transformer_Arcface = transforms.Compose([
         transforms.ToTensor(),
@@ -101,8 +103,9 @@ def detect_landmarks(inputs, model_ft):
     pred_heatmap = outputs[-1][:, :-1, :, :].cpu()
     pred_landmarks, _ = get_preds_fromhm(pred_heatmap)
     landmarks = pred_landmarks*4.0
-    eyes = torch.cat((landmarks[:,96,:], landmarks[:,97,:]), 1)
-    return eyes, pred_heatmap[:,96,:,:], pred_heatmap[:,97,:,:]
+    # eyes = torch.cat((landmarks[:,96,:], landmarks[:,97,:]), 1)
+    # return eyes, pred_heatmap[:,96,:,:], pred_heatmap[:,97,:,:]
+    return landmarks
 
 
 def paint_eyes(images, eyes):

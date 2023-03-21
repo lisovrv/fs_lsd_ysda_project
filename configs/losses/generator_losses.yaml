@@ -3,6 +3,7 @@ GenAdversarialLoss:
 
 IdentityPreservationLoss:
   _target_: faceswap.losses.IdentityPreservationLoss
+  path_to_model: ./pretrained/WFLW_4HG.pth
 
 LandmarkAlignmentLoss:
   _target_: faceswap.losses.LandmarkAlignmentLoss
