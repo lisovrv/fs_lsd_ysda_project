@@ -3,3 +3,4 @@ from .final_loss import FinalLoss
 from .identity_preservation_loss import IdentityPreservationLoss
 from .landmark_alignment_loss import LandmarkAlignmentLoss
 from .reconstruction_loss import ReconstructionLoss
+from .style_transfer_loss import StyleTransferLoss
