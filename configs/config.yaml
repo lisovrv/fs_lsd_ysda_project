@@ -1,6 +1,8 @@
 defaults:
   - dataset: celebahq
   - models: models
+  - losses/generator_losses
+  - losses/discriminator_losses
   - optimizers: adam
   
 exp_name: test_2103
@@ -10,12 +12,21 @@ num_workers: 4
 num_epochs: 10
 use_wandb: False
 
+generator_loss:
+  _target_: faceswap.losses.FinalLoss
+  losses:
+    - ${losses.GenAdversarialLoss}
+    - ${losses.ReconstructionLoss}
+  coefs:
+    - 1
+    - 10
 
-weight_adv: 1
-weight_attr: 10
-weight_id: 70
-weight_rec: 10
-weight_eyes: 1200
+discriminator_loss:
+  _target_: faceswap.losses.FinalLoss
+  losses:
+    - ${losses.DiscAdversarialLoss}
+  coefs:
+    - 1
 
 scheduler: False
 scheduler_step: 5000

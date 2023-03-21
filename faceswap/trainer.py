@@ -4,8 +4,6 @@ from tqdm import tqdm
 import wandb
 from torchvision import utils
 
-from faceswap.losses import compute_generator_loss, compute_discriminator_loss
-
 
 class Trainer(object):
 

@@ -1,0 +1,12 @@
+GenAdversarialLoss:
+  _target_: faceswap.losses.GenAdversarialLoss
+
+IdentityPreservationLoss:
+  _target_: faceswap.losses.IdentityPreservationLoss
+
+LandmarkAlignmentLoss:
+  _target_: faceswap.losses.LandmarkAlignmentLoss
+
+ReconstructionLoss:
+  _target_: faceswap.losses.ReconstructionLoss
+  alpha: 0.8

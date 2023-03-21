@@ -1,0 +1,2 @@
+DiscAdversarialLoss:
+  _target_: faceswap.losses.DiscAdversarialLoss
