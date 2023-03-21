@@ -11,3 +11,6 @@ LandmarkAlignmentLoss:
 ReconstructionLoss:
   _target_: faceswap.losses.ReconstructionLoss
   alpha: 0.8
+
+StyleTransferLoss:
+  _target_: faceswap.losses.StyleTransferLoss
