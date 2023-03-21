@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torchvision import transforms
-from models.stylegan2.op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d
+from faceswap.models.stylegan2.op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d
 import numpy as np
 from mmcv.cnn import constant_init, kaiming_init
 from mmcv.utils.parrots_wrapper import _BatchNorm

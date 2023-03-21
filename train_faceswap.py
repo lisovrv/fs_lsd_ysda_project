@@ -20,6 +20,7 @@ from faceswap.trainer import Trainer
 
 @hydra.main(config_path="configs", config_name="config")
 def main(config: DictConfig):
+    os.chdir(hydra.utils.get_original_cwd())
     if config.use_wandb:
         run = wandb.init(config=config, project="fs_lsd_ysda", name="exp_0")
         run.log_code("./", include_fn=lambda path: path.endswith(".yaml"))
@@ -30,21 +31,26 @@ def main(config: DictConfig):
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    dataset = CelebaHqDataset(config.image_path,
+    dataset_train = CelebaHqDataset(config.dataset.image_path,
                               to_tensor_256=to_tensor,
                               to_tensor_1024=to_tensor)
 
-    train_dataloader = DataLoader(dataset,
+    train_dataloader = DataLoader(dataset=dataset_train,
                                   batch_size=config.batch_size,
                                   shuffle=True,
                                   drop_last=True,
                                   num_workers=config.num_workers)
+    
+    dataset_test = CelebaHqDataset(config.dataset.image_path,
+                              to_tensor_256=to_tensor,
+                              to_tensor_1024=to_tensor,
+                              shuffle=False)
 
-    test_dataloader = DataLoader(dataset=dataset,
+    test_dataloader = DataLoader(dataset=dataset_test,
                                  batch_size=4,
                                  shuffle=False,
-                                 drop_last=True,
-                                 num_workers=4)
+                                 drop_last=False,
+                                 num_workers=0)
 
     landmark_encoder = GradualLandmarkEncoder(106 * 2)
     target_encoder = GPENEncoder(config.largest_size)
@@ -63,12 +69,12 @@ def main(config: DictConfig):
 
     if config.models.pretrained:
         e_ckpt = torch.load(config.models.e_ckpt, map_location=torch.device('cpu'))
-
-        landmark_encoder.load_state_dict(e_ckpt["encoder_lmk"])
-        target_encoder.load_state_dict(e_ckpt["encoder_target"])
-        decoder.load_state_dict(e_ckpt["decoder"])
-        stylegan_generator.load_state_dict(e_ckpt["generator"])
-        mapping_network.load_state_dict(e_ckpt["bald_model"])
+        
+        landmark_encoder.load_state_dict({key[7:]: value for key, value in e_ckpt["encoder_lmk"].items()})
+        target_encoder.load_state_dict({key[7:]: value for key, value in e_ckpt["encoder_target"].items()})
+        decoder.load_state_dict({key[7:]: value for key, value in e_ckpt["decoder"].items()})
+        stylegan_generator.load_state_dict({key[7:]: value for key, value in e_ckpt["generator"].items()})
+        mapping_network.load_state_dict({key[7:]: value for key, value in e_ckpt["bald_model"].items()})
 
     gen_opt = torch.optim.Adam(stylegan_generator.parameters(), config.optimizers.gen_lr,
                                betas=(0, 0.999), weight_decay=1e-4)
@@ -86,7 +92,7 @@ def main(config: DictConfig):
         gen_scheduler, discr_scheduler = None, None
 
     trainer = Trainer(config,
-                      train_dataloader, test_dataloader, len(dataset),
+                      train_dataloader, test_dataloader, len(dataset_train),
                       gen_opt, discr_opt,
                       gen_scheduler, discr_scheduler,
                       stylegan_generator, discr,

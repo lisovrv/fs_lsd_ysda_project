@@ -1,3 +1,5 @@
+import re
+
 import torch
 import numpy as np
 import cv2
@@ -96,7 +98,7 @@ def detect_landmarks(inputs, model_ft):
     inputs = (std * inputs) + mean
 
     outputs, boundary_channels = model_ft(inputs)    
-    pred_heatmap = outputs[-1][:, :-1, :, :].cpu() 
+    pred_heatmap = outputs[-1][:, :-1, :, :].cpu()
     pred_landmarks, _ = get_preds_fromhm(pred_heatmap)
     landmarks = pred_landmarks*4.0
     eyes = torch.cat((landmarks[:,96,:], landmarks[:,97,:]), 1)
@@ -107,13 +109,17 @@ def paint_eyes(images, eyes):
     list_eyes = []
     for i in range(len(images)):
         mask = torch2image(images[i])
-        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB) 
-        
+        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
+
         cv2.circle(mask, (int(eyes[i][0]),int(eyes[i][1])), radius=3, color=(0,255,255), thickness=-1)
         cv2.circle(mask, (int(eyes[i][2]),int(eyes[i][3])), radius=3, color=(0,255,255), thickness=-1)
-        
+
         mask = mask[:, :, ::-1]
         mask = transforms_base(Image.fromarray(mask))
         list_eyes.append(mask)
     tensor_eyes = torch.stack(list_eyes)
     return tensor_eyes
+
+
+def camel2snake_case(s: str):
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', s).lower()

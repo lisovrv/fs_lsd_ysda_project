@@ -9,8 +9,10 @@ from torch.utils.data import Dataset
 class CelebaHqDataset(Dataset):
     def __init__(self, image_path, jpg_tmpl='{}.jpg', png_tmpl='{}.png',
                  npy_tmpl='{}.npy', lmk_tmpl='{}.npy',
-                 to_tensor_256=None, to_tensor_1024=None):
+                 to_tensor_256=None, to_tensor_1024=None, shuffle=True):
 
+        if not shuffle:
+            np.random.seed(0)
         self.image_path = image_path
         self.imgs = self._walk_file(image_path)
         self.jpg_tmpl = jpg_tmpl
