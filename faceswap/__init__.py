@@ -1,3 +1,3 @@
-from faceswap import models, apex, AdaptiveWingLoss
+from faceswap import models
 
-__all__ = ['models', 'apex', 'AdaptiveWingLoss']
+__all__ = ['models']

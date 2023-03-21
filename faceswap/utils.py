@@ -3,7 +3,6 @@ import numpy as np
 import cv2
 from PIL import Image
 import torchvision.transforms as transforms
-from faceswap.AdaptiveWingLoss.utils.utils import get_preds_fromhm
 import torch.nn.functional as F
 
 

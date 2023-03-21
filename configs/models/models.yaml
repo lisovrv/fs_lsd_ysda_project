@@ -1,0 +1,6 @@
+pretrained: True
+e_ckpt: pretrained_models/CELEBA-HQ-1024.pt
+
+
+
+

@@ -1,3 +1,6 @@
 .ipynb_checkpoints/
 outputs/
 *__pycache__*
+pretrained_models/
+dataset/
+jupyter_notebooks/

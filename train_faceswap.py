@@ -1,20 +1,20 @@
 import torch
-import wandb
-
 import os
-
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
+import wandb
 import hydra
 from omegaconf import DictConfig
 
-from torchvision import transforms, utils
-from dataset import *
-from utils import *
+from torch.utils.data import DataLoader
+from torchvision import transforms
 
-from faceswap.models.encoders.psp_encoders import *
-from faceswap.models.stylegan2.model import *
-from faceswap.models.nets import *
+from faceswap.models.encoders.psp_encoders import GradualLandmarkEncoder
+from faceswap.models.stylegan2.model import GPENEncoder, Decoder, Generator
+from faceswap.models.discriminator import Discriminator
+from faceswap.models.nets import F_mapping
+
+from faceswap.dataset import CelebaHqDataset
 from faceswap.trainer import Trainer
 
 
@@ -25,50 +25,52 @@ def main(config: DictConfig):
         run.log_code("./", include_fn=lambda path: path.endswith(".yaml"))
 
     to_tensor = transforms.Compose([
-        transforms.Resize(config.size),
+        transforms.Resize(config.image_size),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    train_dataset = SourceICTargetICLM(config.image_path,
-                                       to_tensor_256=to_tensor,
-                                       to_tensor_1024=to_tensor)
+    dataset = CelebaHqDataset(config.image_path,
+                              to_tensor_256=to_tensor,
+                              to_tensor_1024=to_tensor)
 
-    train_dataloader = DataLoader(train_dataset,
+    train_dataloader = DataLoader(dataset,
                                   batch_size=config.batch_size,
+                                  shuffle=True,
                                   drop_last=True,
                                   num_workers=config.num_workers)
 
-    test_dataloader = DataLoader(dataset=train_dataset,
+    test_dataloader = DataLoader(dataset=dataset,
                                  batch_size=4,
                                  shuffle=False,
                                  drop_last=True,
                                  num_workers=4)
 
-    encoder_lmk = GradualLandmarkEncoder(106 * 2)
-    encoder_target = GPENEncoder(args.largest_size)
+    landmark_encoder = GradualLandmarkEncoder(106 * 2)
+    target_encoder = GPENEncoder(config.largest_size)
 
-    decoder = Decoder(config.least_size, config.size)
+    decoder = Decoder(config.least_size, config.image_size)
 
-    bald_model = F_mapping(mapping_lrmul=config.mapping_lrmul,
-                           mapping_layers=config.mapping_layers,
-                           mapping_fmaps=config.mapping_fmaps,
-                           mapping_nonlinearity=config.mapping_nonlinearity)
-    bald_model.eval()
+    mapping_network = F_mapping(mapping_lrmul=config.mapping_lrmul,
+                                mapping_layers=config.mapping_layers,
+                                mapping_fmaps=config.mapping_fmaps,
+                                mapping_nonlinearity=config.mapping_nonlinearity)
+    mapping_network.eval()
 
-    generator = Generator(config.size, config.latent, config.n_mlp)
+    stylegan_generator = Generator(config.image_size, config.latent, config.n_mlp)
+
     discr = Discriminator(input_nc=3, n_layers=5, norm_layer=torch.nn.InstanceNorm2d)
 
     if config.models.pretrained:
         e_ckpt = torch.load(config.models.e_ckpt, map_location=torch.device('cpu'))
 
-        encoder_lmk.load_state_dict(e_ckpt["encoder_lmk"])
-        encoder_target.load_state_dict(e_ckpt["encoder_target"])
+        landmark_encoder.load_state_dict(e_ckpt["encoder_lmk"])
+        target_encoder.load_state_dict(e_ckpt["encoder_target"])
         decoder.load_state_dict(e_ckpt["decoder"])
-        generator.load_state_dict(e_ckpt["generator"])
-        bald_model.load_state_dict(e_ckpt["bald_model"])
+        stylegan_generator.load_state_dict(e_ckpt["generator"])
+        mapping_network.load_state_dict(e_ckpt["bald_model"])
 
-    gen_opt = torch.optim.Adam(generator.parameters(), config.optimizers.gen_lr,
+    gen_opt = torch.optim.Adam(stylegan_generator.parameters(), config.optimizers.gen_lr,
                                betas=(0, 0.999), weight_decay=1e-4)
     discr_opt = torch.optim.Adam(discr.parameters(), config.optimizers.discr_lr,
                                  betas=(0, 0.999), weight_decay=1e-4)
@@ -83,14 +85,13 @@ def main(config: DictConfig):
     else:
         gen_scheduler, discr_scheduler = None, None
 
-    # train
-    trainer = Trainer(config, train_dataloader, test_dataloader,
-                      generator, discr,
+    trainer = Trainer(config,
+                      train_dataloader, test_dataloader, len(dataset),
                       gen_opt, discr_opt,
                       gen_scheduler, discr_scheduler,
-                      len(train_dataset),
-                      encoder_lmk, encoder_target,
-                      decoder, bald_model)
+                      stylegan_generator, discr,
+                      landmark_encoder, target_encoder,
+                      decoder, mapping_network)
     trainer.train()
 
 

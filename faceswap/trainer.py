@@ -1,52 +1,43 @@
-import torch
 import os
+import torch
 from tqdm import tqdm
 import wandb
 
-import sys
-
-sys.path.append('./faceswap/apex')
-from apex import amp
-from faceswap.losses import *
+from faceswap.losses import compute_generator_losses, compute_discriminator_loss
 
 
 class Trainer(object):
 
-    def __init__(self, config, train_dataloader, test_dataloader,
-                 generator, discr,
+    def __init__(self, config, train_dataloader, test_dataloader, train_dataset_len,
                  gen_opt, discr_opt,
                  gen_scheduler, discr_scheduler,
-                 train_dataset_len,
-                 encoder_lmk, encoder_target,
-                 decoder, bald_model):
+                 stylegan_generator, discr,
+                 landmark_encoder, target_encoder,
+                 decoder, mapping_network):
 
         self.config = config
         self.train_dataset_len = train_dataset_len
+        self.train_dataloader = train_dataloader
+        self.test_dataloader = test_dataloader
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.generator = generator.to(self.device)
+        self.stylegan_generator = stylegan_generator.to(self.device)
         self.discr = discr.to(self.device)
 
         self.gen_opt, self.discr_opt = gen_opt, discr_opt
         self.gen_scheduler, self.discr_scheduler = gen_scheduler, discr_scheduler
 
-        self.generator, self.gen_opt = amp.initialize(self.generator, self.gen_opt,
-                                                      opt_level=config.optim_level)
-        self.discr, self.discr_opt = amp.initialize(self.discr, self.discr_opt,
-                                                    opt_level=config.optim_level)
-
-        self.train_dataloader = train_dataloader
-        self.test_dataloader = test_dataloader
-
-        self.encoder_lmk = encoder_lmk.to(self.device)
-        self.encoder_target = encoder_target.to(self.device)
+        self.landmark_encoder = landmark_encoder.to(self.device)
+        self.target_encoder = target_encoder.to(self.device)
         self.decoder = decoder.to(self.device)
-        self.bald_model = bald_model.to(self.device)
+        self.mapping_network = mapping_network.to(self.device)
 
     def train(self):
-        self.generator.train()
-        self.generator.train()
+        self.target_encoder.train()
+        self.decoder.train()
+        self.landmark_encoder.train()
+
         for epoch in range(self.config.num_epochs):
             self.train_epoch(epoch)
 
@@ -68,28 +59,31 @@ class Trainer(object):
             input_map = torch.cat([s_map, t_map], dim=1)
             t_mask = t_mask.unsqueeze_(1).float()
 
-            t_lmk_code = self.encoder_lmk(input_map)
+            t_lmk_code = self.landmark_encoder(input_map)
 
-            zero_latent = torch.zeros((self.config.batch, 18 - self.config.coarse, 512)).to(self.device).detach()
+            zero_latent = torch.zeros((self.config.batch,
+                                       18 - self.config.coarse,
+                                       512)).to(self.device).detach()
+
             t_lmk_code = torch.cat([t_lmk_code, zero_latent], dim=1)
             fusion_code = s_frame_code + t_lmk_code
 
             fusion_code = torch.cat([fusion_code[:, : 18 - self.config.coarse],
                                      t_frame_code[:, 18 - self.config.coarse:]],
                                     dim=1)
-            fusion_code = self.bald_model(fusion_code.view(fusion_code.size(0), -1), 2)
+
+            fusion_code = self.mapping_network(fusion_code.view(fusion_code.size(0), -1), 2)
             fusion_code = fusion_code.view(t_frame_code.size())
 
-            source_feas = self.generator([fusion_code],
-                                    input_is_latent=True, randomize_noise=False)
-            target_feas = self.encoder_target(t_img)
+            source_feas = self.stylegan_generator([fusion_code],
+                                                  input_is_latent=True, randomize_noise=False)
+            target_feas = self.target_encoder(t_img)
 
             blend_img = self.decoder(source_feas, target_feas, t_mask)
 
             loss_g = compute_generator_losses(blend_img, ...)
+            loss_g.backward()
 
-            with amp.scale_loss(loss_g, self.gen_opt) as scaled_loss:
-                scaled_loss.backward()
             self.gen_opt.step()
 
             # Discriminator training
@@ -97,9 +91,7 @@ class Trainer(object):
             self.discr_opt.zero_grad()
 
             loss_d = compute_discriminator_loss(blend_img, ...)
-
-            with amp.scale_loss(loss_d, self.discr_opt) as scaled_loss:
-                scaled_loss.backward()
+            loss_d.backward()
 
             self.discr_opt.step()
 
@@ -119,7 +111,7 @@ class Trainer(object):
                 'discr/loss_discr': lossD.item(),
             }
 
-            self.generator.eval()
+            self.decoder.eval()
             self.discr.eval()
 
             step_to_log = epoch * self.train_dataset_len + (iteration + 1) * self.config.batch_size
@@ -136,8 +128,8 @@ class Trainer(object):
                 gen_path_lattest = os.path.join(self.config.model_save_dir,
                                                 self.config.exp_name,
                                                 f'lattest_generator.pth')
-                torch.save(self.generator.state_dict(), gen_path)
-                torch.save(self.generator.state_dict(), gen_path_lattest)
+                torch.save(self.decoder.state_dict(), gen_path)
+                torch.save(self.discr.state_dict(), gen_path_lattest)
 
                 d_path = os.path.join(self.config.model_save_dir,
                                       self.config.exp_name,

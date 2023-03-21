@@ -1,16 +1,15 @@
 defaults:
-  - dataset: vggface2
-  - models: gen_discr
+  - dataset: celebahq
+  - models: models
   - optimizers: adam
   
-  
-exp_name: test_0203
+exp_name: test_2103
 
-
-batch_size: 16
-num_workers: 8
+batch_size: 4
+num_workers: 4
 num_epochs: 10
-use_wandb: True
+use_wandb: False
+
 
 weight_adv: 1
 weight_attr: 10
@@ -22,11 +21,21 @@ scheduler: False
 scheduler_step: 5000
 scheduler_gamma: 0.2
 
-diff_eq_same: False
-
 
 loss_log_step: 10
 wandb_img_step: 100
 
 model_save_step: 5000
 model_save_dir: exp_results/
+
+image_size: 1024
+latent: 512
+n_mlp: 8
+channel_multiplier: 2
+coarse: 7
+least_size: 8
+largest_size: 512
+mapping_layers: 18
+mapping_fmaps: 512
+mapping_lrmul: 1
+mapping_nonlinearity: 'linear'
