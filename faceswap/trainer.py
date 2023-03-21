@@ -19,7 +19,10 @@ class Trainer(object):
         self.train_dataloader = train_dataloader
         self.test_dataloader = test_dataloader
 
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+        self.generator_loss = self.config.generator_loss.to(self.device)
+        self.discriminator_loss = self.config.generator_loss.to(self.device)
 
         self.stylegan_generator = stylegan_generator.to(self.device)
         self.discr = discr.to(self.device)
@@ -42,76 +45,89 @@ class Trainer(object):
             self.evaluate(epoch)
             self.train_epoch(epoch)
 
+    def generator_step(self, data):
+        s_img, s_code, s_map, s_lmk, t_img, t_code, t_map, t_lmk, t_mask, s_index, t_index = data
+        s_img = s_img.to(self.device)
+        s_map = s_map.to(self.device).transpose(1, 3).float()
+        t_img = t_img.to(self.device)
+        t_map = t_map.to(self.device).transpose(1, 3).float()
+        t_lmk = t_lmk.to(self.device)
+        t_mask = t_mask.to(self.device)
 
+        s_frame_code = s_code.to(self.device)
+        t_frame_code = t_code.to(self.device)
+
+        input_map = torch.cat([s_map, t_map], dim=1)
+        t_mask = t_mask.unsqueeze_(1).float()
+
+        t_lmk_code = self.landmark_encoder(input_map)
+
+        zero_latent = torch.zeros((self.config.batch_size,
+                                   18 - self.config.coarse,
+                                   512)).to(self.device).detach()
+
+        t_lmk_code = torch.cat([t_lmk_code, zero_latent], dim=1)
+        fusion_code = s_frame_code + t_lmk_code
+
+        fusion_code = torch.cat([fusion_code[:, : 18 - self.config.coarse],
+                                 t_frame_code[:, 18 - self.config.coarse:]], dim=1)
+
+        fusion_code = self.mapping_network(fusion_code.view(fusion_code.size(0), -1), 2)
+        fusion_code = fusion_code.view(t_frame_code.size())
+
+        source_feas = self.stylegan_generator([fusion_code],
+                                              input_is_latent=True, randomize_noise=False)
+        target_feas = self.target_encoder(t_img)
+
+        blend_img = self.decoder(source_feas, target_feas, t_mask)
+
+        return {
+            'fake_disc_out': ...,
+            'source': s_img,
+            'target': t_img,
+            'final': blend_img,
+        }
+
+    def discriminator_step(self, data):
+        return {
+            'fake_disc_out': ...,
+            'real_disc_out': ...,
+        }
 
     def train_epoch(self, epoch):
         pbar = tqdm(self.train_dataloader)
-        for iteration, (s_img, s_code, s_map, s_lmk, t_img, t_code, t_map, t_lmk, t_mask,
-                        s_index, t_index) in enumerate(pbar):
+        for iteration, data in enumerate(pbar):
+            output = self.generator_step(data)
 
-            s_img = s_img.to(self.device)
-            s_map = s_map.to(self.device).transpose(1, 3).float()
-            t_img = t_img.to(self.device)
-            t_map = t_map.to(self.device).transpose(1, 3).float()
-            t_lmk = t_lmk.to(self.device)
-            t_mask = t_mask.to(self.device)
+            # Generator step
 
-            s_frame_code = s_code.to(self.device)
-            t_frame_code = t_code.to(self.device)
+            self.gen_opt.zero_grad()
 
-            input_map = torch.cat([s_map, t_map], dim=1)
-            t_mask = t_mask.unsqueeze_(1).float()
-
-            t_lmk_code = self.landmark_encoder(input_map)
-
-            zero_latent = torch.zeros((self.config.batch_size,
-                                       18 - self.config.coarse,
-                                       512)).to(self.device).detach()
-
-            t_lmk_code = torch.cat([t_lmk_code, zero_latent], dim=1)
-            fusion_code = s_frame_code + t_lmk_code
-
-            fusion_code = torch.cat([fusion_code[:, : 18 - self.config.coarse],
-                                     t_frame_code[:, 18 - self.config.coarse:]], dim=1)
-
-            fusion_code = self.mapping_network(fusion_code.view(fusion_code.size(0), -1), 2)
-            fusion_code = fusion_code.view(t_frame_code.size())
-
-            source_feas = self.stylegan_generator([fusion_code],
-                                                  input_is_latent=True, randomize_noise=False)
-            target_feas = self.target_encoder(t_img)
-
-            blend_img = self.decoder(source_feas, target_feas, t_mask)
-
-            loss_g = compute_generator_loss(blend_img, s_img)
+            loss_g = self.generator_loss(**output)
             loss_g.backward()
 
             self.gen_opt.step()
+            if self.config.scheduler:
+                self.gen_scheduler.step()
 
             # Discriminator training
 
-            #self.discr_opt.zero_grad()
+            self.discr_opt.zero_grad()
 
-            #loss_d = compute_discriminator_loss(blend_img, t_img)
-            #loss_d.backward()
+            output = self.discriminator_step(data)
 
-            #self.discr_opt.step()
+            loss_d = self.discriminator_loss(**output)
+            loss_d.backward()
 
+            self.discr_opt.step()
             if self.config.scheduler:
-                self.gen_scheduler.step()
-                #self.discr_scheduler.step()
+                self.discr_scheduler.step()
 
             # Visualization
 
-            total_loss = {
-                'gen/loss_id': L_id.item(),
-                'gen/loss_adv': L_adv.item(),
-                'gen/loss_attr': L_attr.item(),
-                'gen/loss_rec': L_rec.item(),
-
-                'gen/loss_gen': lossG.item(),
-                'discr/loss_discr': lossD.item(),
-            }
+            total_loss = {}
+            total_loss.update({f'gen/{key}': value for key, value in loss_g.items()})
+            total_loss.update({f'disc/{key}': value for key, value in loss_g.items()})
 
             self.decoder.eval()
 

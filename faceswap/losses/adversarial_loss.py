@@ -6,6 +6,7 @@ class GenAdversarialLoss(nn.Module):
     def __init__(self):
         super().__init__()
         self.bce_loss = nn.BCEWithLogitsLoss()
+
     def forward(self, fake_disc_out: Tensor, **kwargs):
         labels = torch.full(fake_disc_out.shape[:1], 1.).to(fake_disc_out)  # to float and device
         return self.bce_loss(fake_disc_out, labels)
