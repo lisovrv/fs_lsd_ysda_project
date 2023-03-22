@@ -13,10 +13,7 @@ class IdentityPreservationLoss(nn.Module):
         self.model = iresnet100(fp16=False)
         self.model.load_state_dict(torch.load('arcface_model/backbone.pth', map_location='cuda'))
         self.model.to('cuda').eval()
-        
-        # self.transforms_arcface = transforms.Compose([
-        #     transforms.Resize((224, 224)),
-        # ])
+
 
     def forward(self, final: Tensor, source: Tensor, **kwargs):
         

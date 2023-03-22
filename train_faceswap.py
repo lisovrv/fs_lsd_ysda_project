@@ -22,7 +22,7 @@ from faceswap.trainer import Trainer
 def main(config: DictConfig):
     os.chdir(hydra.utils.get_original_cwd())
     if config.use_wandb:
-        run = wandb.init(config=config, project="fs_lsd_ysda", name="exp_3")
+        run = wandb.init(config=config, project="fs_lsd_ysda", name="exp_4")
         run.log_code("./", include_fn=lambda path: path.endswith(".yaml"))
 
     to_tensor = transforms.Compose([
@@ -33,7 +33,8 @@ def main(config: DictConfig):
 
     dataset_train = CelebaHqDataset(config.dataset.image_path,
                               to_tensor_256=to_tensor,
-                              to_tensor_1024=to_tensor)
+                              to_tensor_1024=to_tensor,
+                              dataset_size=1e3)
 
     train_dataloader = DataLoader(dataset=dataset_train,
                                   batch_size=config.batch_size,
@@ -44,7 +45,8 @@ def main(config: DictConfig):
     dataset_test = CelebaHqDataset(config.dataset.image_path,
                               to_tensor_256=to_tensor,
                               to_tensor_1024=to_tensor,
-                              shuffle=False)
+                              shuffle=False,
+                              dataset_size=1e2)
 
     test_dataloader = DataLoader(dataset=dataset_test,
                                  batch_size=2,

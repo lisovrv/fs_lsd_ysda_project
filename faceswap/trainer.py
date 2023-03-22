@@ -5,6 +5,7 @@ import wandb
 from torchvision import utils
 
 from hydra.utils import instantiate
+from faceswap.utils import make_image_list
 
 
 class Trainer(object):
@@ -41,11 +42,9 @@ class Trainer(object):
         self.target_encoder.train()
         self.decoder.train()
         self.landmark_encoder.train()
-
         for epoch in range(self.config.num_epochs):
             print(f'epoch = {epoch}')
             self.train_epoch(epoch)
-            self.evaluate(epoch)
 
     def generator_step(self, data):
         s_img, s_code, s_map, s_lmk, t_img, t_code, t_map, t_lmk, t_mask, s_index, t_index = data
@@ -99,6 +98,7 @@ class Trainer(object):
         }
 
     def train_epoch(self, epoch):
+        
         pbar = tqdm(self.train_dataloader)
         for iteration, data in enumerate(pbar):
             output = self.generator_step(data)
@@ -136,85 +136,70 @@ class Trainer(object):
             self.decoder.eval()
 
             step_to_log = epoch * self.train_dataset_len + (iteration + 1) * self.config.batch_size
-            if (iteration + 1) % self.config.loss_log_step == 0:
+            if step_to_log % self.config.loss_log_step == 0:
                 if self.config.use_wandb:
                     wandb.log(total_loss, step=step_to_log)
                 else:
                     print(step_to_log, total_loss)
+                    
+                    
+            if step_to_log % self.config.wandb_img_step == 0:
+                self.target_encoder.eval()
+                self.decoder.eval()
+                self.landmark_encoder.eval()
 
-#             if (iteration + 1) % self.config.model_save_step == 0:
-#                 gen_path = os.path.join(self.config.model_save_dir,
-#                                         self.config.exp_name,
-#                                         f'{step_to_log}_generator.pth')
-#                 gen_path_lattest = os.path.join(self.config.model_save_dir,
-#                                                 self.config.exp_name,
-#                                                 f'lattest_generator.pth')
-#                 torch.save(self.decoder.state_dict(), gen_path)
-#                 torch.save(self.discr.state_dict(), gen_path_lattest)
+                self.evaluate(step_to_log)
 
-#                 d_path = os.path.join(self.config.model_save_dir,
-#                                       self.config.exp_name,
-#                                       f'{step_to_log}_discr.pth')
-#                 d_path_lattest = os.path.join(self.config.model_save_dir,
-#                                               self.config.exp_name,
-#                                               f'lattest_generator.pth')
-#                 torch.save(self.discr.state_dict(), d_path)
-#                 torch.save(self.discr.state_dict(), d_path_lattest)
+                self.target_encoder.train()
+                self.decoder.train()
+                self.landmark_encoder.train()
+
+            if step_to_log % self.config.model_save_step == 0:
+                self.save_model(self.target_encoder, 'target_encoder', step_to_log)
+                self.save_model(self.decoder, 'decoder', step_to_log)
+                self.save_model(self.landmark_encoder, 'landmark_encoder', step_to_log)
+         
+        
+    def save_model(self, model, name, step_to_log):
+        model.eval()
+        path = os.path.join(self.config.model_save_dir,
+                                self.config.exp_name,
+                                f'{step_to_log}_{name}.pth')
+        path_lattest = os.path.join(self.config.model_save_dir,
+                                        self.config.exp_name,
+                                        f'lattest_{name}.pth')
+        torch.save(model.state_dict(), path)
+        torch.save(model.state_dict(), path_lattest)
+        model.train()
+     
                 
-                
-    def evaluate(self, epoch):
-        for iteration, (s_img, s_code, s_map, s_lmk, t_img,
-         t_code, t_map, t_lmk, t_mask, s_index, t_index) in enumerate(self.test_dataloader):
-            if iteration > 5:
-                break
-                
-            s_img = s_img.to(self.device)
-            s_map = s_map.to(self.device).transpose(1, 3).float()
-            t_img = t_img.to(self.device)
-            t_map = t_map.to(self.device).transpose(1, 3).float()
-            t_lmk = t_lmk.to(self.device)
-            t_mask = t_mask.to(self.device)
-
-            s_frame_code = s_code.to(self.device)
-            t_frame_code = t_code.to(self.device)
-
-            input_map = torch.cat([s_map, t_map], dim=1)
-            t_mask = t_mask.unsqueeze_(1).float()
-
-            t_lmk_code = self.landmark_encoder(input_map)
-
-            zero_latent = torch.zeros((self.config.batch_size,
-                                       18 - self.config.coarse,
-                                       512)).to(self.device).detach()
-
-            t_lmk_code = torch.cat([t_lmk_code, zero_latent], dim=1)
-            fusion_code = s_frame_code + t_lmk_code
-
-            fusion_code = torch.cat([fusion_code[:, : 18 - self.config.coarse],
-                                     t_frame_code[:, 18 - self.config.coarse:]],
-                                    dim=1)
-
-            fusion_code = self.mapping_network(fusion_code.view(fusion_code.size(0), -1), 2)
-            fusion_code = fusion_code.view(t_frame_code.size())
-
-            source_feas, side = self.stylegan_generator([fusion_code],
-                                                  input_is_latent=True, randomize_noise=False)
-            target_feas = self.target_encoder(t_img)
-
-            blend_img = self.decoder(source_feas, target_feas, t_mask)
-
-            name = str(int(s_index[0]))+'_'+str(int(t_index[0]))
-            with torch.no_grad():
-                
+    def evaluate(self, step_to_log):
+        with torch.no_grad():
+            for iteration, data in enumerate(self.test_dataloader):
+                if iteration > 3:
+                    break
+            
+                output = self.generator_step(data)
+                s_img = output['source']
+                blend_img = output['final']
+                t_img = output['target']
+                t_mask = data[8].to(t_img.device)
+ 
                 sample = torch.cat([s_img.detach(), t_img.detach()])
                 sample = torch.cat([sample, blend_img.detach()])
                 t_mask = torch.stack([t_mask,t_mask,t_mask],dim=1).squeeze(2)
                 sample = torch.cat([sample, t_mask.detach()])
-
+                name = str(int(data[9][0]))+'_'+str(int(data[10][0]))
                 utils.save_image(
                     sample,
-                    f'./resulted_imgs/epoch_{epoch}_img_{name}.jpg',
+                    f'./resulted_imgs/{self.config.exp_name}/step_{step_to_log}_name_{name}.jpg',
                     nrow=4,
                     normalize=True,
                     range=(-1, 1),
                 )
+                
+            if self.config.use_wandb:
+                image = make_image_list([s_img, t_img, blend_img])
+                output = wandb.Image(image, caption=f'{step_to_log}_result')
+                wandb.log({"result": output})
+                
