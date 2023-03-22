@@ -22,7 +22,7 @@ from faceswap.trainer import Trainer
 def main(config: DictConfig):
     os.chdir(hydra.utils.get_original_cwd())
     if config.use_wandb:
-        run = wandb.init(config=config, project="fs_lsd_ysda", name="exp_4")
+        run = wandb.init(config=config, project="fs_lsd_ysda", name="exp_8")
         run.log_code("./", include_fn=lambda path: path.endswith(".yaml"))
 
     to_tensor = transforms.Compose([
@@ -34,7 +34,7 @@ def main(config: DictConfig):
     dataset_train = CelebaHqDataset(config.dataset.image_path,
                               to_tensor_256=to_tensor,
                               to_tensor_1024=to_tensor,
-                              dataset_size=1e3)
+                              dataset_size=1e5)
 
     train_dataloader = DataLoader(dataset=dataset_train,
                                   batch_size=config.batch_size,
@@ -56,33 +56,33 @@ def main(config: DictConfig):
 
     landmark_encoder = GradualLandmarkEncoder(106 * 2)
     target_encoder = GPENEncoder(config.largest_size)
-
     decoder = Decoder(config.least_size, config.image_size)
 
     mapping_network = F_mapping(mapping_lrmul=config.mapping_lrmul,
                                 mapping_layers=config.mapping_layers,
                                 mapping_fmaps=config.mapping_fmaps,
-                                mapping_nonlinearity=config.mapping_nonlinearity)
-    mapping_network.eval()
-
-    stylegan_generator = Generator(config.image_size, config.latent, config.n_mlp)
+                                mapping_nonlinearity=config.mapping_nonlinearity).eval()
+    stylegan_generator = Generator(config.image_size, config.latent, config.n_mlp).eval()
 
     #discr = Discriminator(input_nc=3, n_layers=5, norm_layer=torch.nn.InstanceNorm2d)
     discr = Discriminator(size=1024)
 
+    e_ckpt = torch.load(config.models.e_ckpt, map_location=torch.device('cpu'))
     if config.models.pretrained:
-        e_ckpt = torch.load(config.models.e_ckpt, map_location=torch.device('cpu'))
-        
         landmark_encoder.load_state_dict({key[7:]: value for key, value in e_ckpt["encoder_lmk"].items()})
         target_encoder.load_state_dict({key[7:]: value for key, value in e_ckpt["encoder_target"].items()})
         decoder.load_state_dict({key[7:]: value for key, value in e_ckpt["decoder"].items()})
-        stylegan_generator.load_state_dict({key[7:]: value for key, value in e_ckpt["generator"].items()})
-        mapping_network.load_state_dict({key[7:]: value for key, value in e_ckpt["bald_model"].items()})
-
-    gen_opt = torch.optim.Adam(stylegan_generator.parameters(), config.optimizers.gen_lr,
-                               betas=(0, 0.999), weight_decay=1e-4)
-    discr_opt = torch.optim.Adam(discr.parameters(), config.optimizers.discr_lr,
-                                 betas=(0, 0.999), weight_decay=1e-4)
+        
+    stylegan_generator.load_state_dict({key[7:]: value for key, value in e_ckpt["generator"].items()})
+    mapping_network.load_state_dict({key[7:]: value for key, value in e_ckpt["bald_model"].items()})
+    
+    gen_opt = torch.optim.Adam([{'params': landmark_encoder.parameters()},
+                                {'params': target_encoder.parameters()},
+                                {'params': decoder.parameters()},],
+                                config.optimizers.gen_lr)
+    
+    
+    discr_opt = torch.optim.Adam(discr.parameters(), config.optimizers.discr_lr)
 
     if config.scheduler:
         gen_scheduler = torch.optim.lr_scheduler.StepLR(gen_opt,

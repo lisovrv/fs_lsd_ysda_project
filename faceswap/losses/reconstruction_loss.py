@@ -11,6 +11,7 @@ class ReconstructionLoss(nn.Module):
         self.alpha = torch.tensor([alpha])
         self.loss_fn_vgg = lpips.LPIPS(net='vgg')
         self._mse = torch.nn.MSELoss(reduction='none')
+        self.last_iter_value = torch.tensor([0.])
 
     def forward(
         self,
@@ -20,13 +21,14 @@ class ReconstructionLoss(nn.Module):
         final: Tensor,
         **kwargs,
     ):
-        if not torch.allclose(source, target):
+        if torch.allclose(source, target):
             batch_size = source.size(0)
 
             loss = self._mse(final, target).mean() + self._mse(side, target).mean()
             
             lpips_loss = (self.loss_fn_vgg(final, target) + self.loss_fn_vgg(side, target)).squeeze().mean()
             
-            return loss + self.alpha.to(loss.device) * lpips_loss
+            self.last_iter_value =  loss + self.alpha.to(loss.device) * lpips_loss
+            return self.last_iter_value
         else:
-            return 0.
+            return self.last_iter_value.item()

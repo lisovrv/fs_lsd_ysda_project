@@ -17,9 +17,9 @@ class IdentityPreservationLoss(nn.Module):
 
     def forward(self, final: Tensor, source: Tensor, **kwargs):
         
-        with torch.no_grad():
-            source_emb = self.model(F.interpolate(source, [112, 112], mode='bilinear', align_corners=False))
-            final_emb = self.model(F.interpolate(final, [112, 112], mode='bilinear', align_corners=False))
+        # with torch.no_grad():
+        source_emb = self.model(F.interpolate(source, [112, 112], mode='bilinear', align_corners=False))
+        final_emb = self.model(F.interpolate(final, [112, 112], mode='bilinear', align_corners=False))
             
         labels = torch.full((final_emb.size(0),), 1).to(final_emb.device).long()
         return self.loss(final_emb, source_emb, labels)

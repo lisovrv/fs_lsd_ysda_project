@@ -9,3 +9,4 @@ wandb/
 faceswap/AdaptiveWingLoss/AWL_detector/
 pretrained/WFLW_4HG.pth
 arcface_model/backbone.pth
+exp_results/

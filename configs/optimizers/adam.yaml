@@ -1,4 +1,4 @@
 name: adam
 
-gen_lr: 5e-5
-discr_lr: 5e-5
+gen_lr: 2e-5
+discr_lr: 2e-5

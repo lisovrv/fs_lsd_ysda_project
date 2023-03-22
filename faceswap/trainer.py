@@ -39,6 +39,8 @@ class Trainer(object):
         self.mapping_network = mapping_network.to(self.device)
 
     def train(self):
+        self.evaluate(0)
+        
         self.target_encoder.train()
         self.decoder.train()
         self.landmark_encoder.train()
@@ -46,8 +48,16 @@ class Trainer(object):
             print(f'epoch = {epoch}')
             self.train_epoch(epoch)
 
-    def generator_step(self, data):
+    def generator_step(self, data, iteration):
         s_img, s_code, s_map, s_lmk, t_img, t_code, t_map, t_lmk, t_mask, s_index, t_index = data
+        if iteration % self.config.num_identity == 0:
+            s_img = t_img
+            s_code = t_code
+            s_lmk = t_lmk
+            s_map = t_map
+            s_index = t_index
+            
+        
         s_img = s_img.to(self.device)
         s_map = s_map.to(self.device).transpose(1, 3).float()
         t_img = t_img.to(self.device)
@@ -101,7 +111,7 @@ class Trainer(object):
         
         pbar = tqdm(self.train_dataloader)
         for iteration, data in enumerate(pbar):
-            output = self.generator_step(data)
+            output = self.generator_step(data, iteration)
 
             # Generator step
 
@@ -114,26 +124,25 @@ class Trainer(object):
             if self.config.scheduler:
                 self.gen_scheduler.step()
 
-            # Discriminator training
+            if iteration % 16 == 0:
+                # Discriminator training
 
-            self.discr_opt.zero_grad()
+                self.discr_opt.zero_grad()
 
-            output = self.discriminator_step(output['final'], data[4].to(self.device)) # blend_img, t_img
+                output = self.discriminator_step(output['final'], data[4].to(self.device)) # blend_img, t_img
 
-            loss_d = self.discriminator_loss(**output)
-            loss_d["loss"].backward()
+                loss_d = self.discriminator_loss(**output)
+                loss_d["loss"].backward()
 
-            self.discr_opt.step()
-            if self.config.scheduler:
-                self.discr_scheduler.step()
+                self.discr_opt.step()
+                if self.config.scheduler:
+                    self.discr_scheduler.step()
 
             # Visualization
 
             total_loss = {}
             total_loss.update({f'gen/{key}': value for key, value in loss_g.items()})
             total_loss.update({f'disc/{key}': value for key, value in loss_d.items()})
-
-            self.decoder.eval()
 
             step_to_log = epoch * self.train_dataset_len + (iteration + 1) * self.config.batch_size
             if step_to_log % self.config.loss_log_step == 0:
@@ -144,15 +153,11 @@ class Trainer(object):
                     
                     
             if step_to_log % self.config.wandb_img_step == 0:
-                self.target_encoder.eval()
-                self.decoder.eval()
-                self.landmark_encoder.eval()
-
                 self.evaluate(step_to_log)
-
                 self.target_encoder.train()
                 self.decoder.train()
                 self.landmark_encoder.train()
+
 
             if step_to_log % self.config.model_save_step == 0:
                 self.save_model(self.target_encoder, 'target_encoder', step_to_log)
@@ -174,32 +179,36 @@ class Trainer(object):
      
                 
     def evaluate(self, step_to_log):
+        self.target_encoder.eval()
+        self.decoder.eval()
+        self.landmark_encoder.eval()
         with torch.no_grad():
             for iteration, data in enumerate(self.test_dataloader):
                 if iteration > 3:
                     break
             
-                output = self.generator_step(data)
+                output = self.generator_step(data, iteration)
                 s_img = output['source']
+                side = output['side']
                 blend_img = output['final']
                 t_img = output['target']
                 t_mask = data[8].to(t_img.device)
  
-                sample = torch.cat([s_img.detach(), t_img.detach()])
-                sample = torch.cat([sample, blend_img.detach()])
-                t_mask = torch.stack([t_mask,t_mask,t_mask],dim=1).squeeze(2)
-                sample = torch.cat([sample, t_mask.detach()])
-                name = str(int(data[9][0]))+'_'+str(int(data[10][0]))
-                utils.save_image(
-                    sample,
-                    f'./resulted_imgs/{self.config.exp_name}/step_{step_to_log}_name_{name}.jpg',
-                    nrow=4,
-                    normalize=True,
-                    range=(-1, 1),
-                )
+                # sample = torch.cat([s_img.detach(), t_img.detach()])
+                # sample = torch.cat([sample, blend_img.detach()])
+                # t_mask = torch.stack([t_mask,t_mask,t_mask],dim=1).squeeze(2)
+                # sample = torch.cat([sample, t_mask.detach()])
+                # name = str(int(data[9][0]))+'_'+str(int(data[10][0]))
+                # utils.save_image(
+                #     sample,
+                #     f'./resulted_imgs/{self.config.exp_name}/step_{step_to_log}_name_{name}.jpg',
+                #     nrow=2,
+                #     normalize=True,
+                #     range=(-1, 1),
+                # )
                 
             if self.config.use_wandb:
-                image = make_image_list([s_img, t_img, blend_img])
+                image = make_image_list([s_img, t_img, side, blend_img])
                 output = wandb.Image(image, caption=f'{step_to_log}_result')
                 wandb.log({"result": output})
                 

@@ -102,9 +102,8 @@ def detect_landmarks(inputs, model_ft):
     outputs, boundary_channels = model_ft(inputs)    
     pred_heatmap = outputs[-1][:, :-1, :, :].cpu()
     pred_landmarks, _ = get_preds_fromhm(pred_heatmap)
-    landmarks = pred_landmarks*4.0
-    # eyes = torch.cat((landmarks[:,96,:], landmarks[:,97,:]), 1)
-    # return eyes, pred_heatmap[:,96,:,:], pred_heatmap[:,97,:,:]
+    landmarks = pred_landmarks * 4.0
+    landmarks = landmarks / torch.tensor(inputs.shape[-2:]).to(landmarks.device).unsqueeze(0)
     return landmarks
 
 

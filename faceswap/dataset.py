@@ -77,6 +77,8 @@ class CelebaHqDataset(Dataset):
 
         s_index = np.random.randint(0, len(self.imgs) - 1)
         t_index = np.random.randint(0, len(self.imgs) - 1)
+        
+        
         s_img = self._load_jpg(self.image_path, s_index)
         s_code = self._load_npy(self.image_path.replace('img', 'latent'), s_index)
 
