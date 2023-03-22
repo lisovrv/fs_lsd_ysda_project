@@ -1,7 +1,7 @@
 import torch
 from torch import nn as nn, Tensor
 
-from AdaptiveWingLoss.core import models
+from faceswap.AdaptiveWingLoss.core import models
 from faceswap.utils import detect_landmarks
 
 

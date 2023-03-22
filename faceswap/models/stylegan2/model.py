@@ -542,7 +542,7 @@ class Generator(nn.Module):
         image = skip
 
         # return image, fea_outs#, img_skips
-        return fea_outs#, img_skips
+        return fea_outs, image
 
 
 

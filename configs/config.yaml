@@ -5,23 +5,21 @@ defaults:
   - losses/discriminator_losses
   - optimizers: adam
   
-exp_name: test_2103
+exp_name: test_2203
 
-batch_size: 4
-num_workers: 4
+batch_size: 2
+num_workers: 2
 num_epochs: 10
-use_wandb: False
+use_wandb: True
 
 generator_loss:
   _target_: faceswap.losses.FinalLoss
   losses:
     - ${losses.GenAdversarialLoss}
     - ${losses.ReconstructionLoss}
-    - ${losses.IdentityPreservationLoss}
   coefs:
     - 1
     - 10
-    - 1
 
 discriminator_loss:
   _target_: faceswap.losses.FinalLoss

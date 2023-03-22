@@ -5,3 +5,5 @@ pretrained_models/
 dataset/
 jupyter_notebooks/
 resulted_imgs/
+wandb/
+faceswap/AdaptiveWingLoss/AWL_detector/

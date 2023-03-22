@@ -19,11 +19,13 @@ class ReconstructionLoss(nn.Module):
         final: Tensor,
         **kwargs,
     ):
-        if torch.allclose(source, target):
+        if not torch.allclose(source, target):
             batch_size = source.size(0)
+            
             loss = torch.norm((final - target).view(batch_size, -1), dim=1) + \
                 torch.norm((side - target).view(batch_size, -1), dim=1)
             lpips_loss = (self.loss_fn_vgg(final, target) + self.loss_fn_vgg(side, target)).squeeze()
-            return (loss + self.alpha * lpips_loss).mean()
+            
+            return (loss + self.alpha.to(loss.device) * lpips_loss).mean()
         else:
             return 0.

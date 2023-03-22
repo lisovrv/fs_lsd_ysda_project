@@ -4,6 +4,8 @@ from tqdm import tqdm
 import wandb
 from torchvision import utils
 
+from hydra.utils import instantiate
+
 
 class Trainer(object):
 
@@ -21,8 +23,8 @@ class Trainer(object):
 
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-        self.generator_loss = self.config.generator_loss.to(self.device)
-        self.discriminator_loss = self.config.generator_loss.to(self.device)
+        self.generator_loss = instantiate(self.config.generator_loss, _convert_="all").to(self.device)
+        self.discriminator_loss = instantiate(self.config.discriminator_loss, _convert_="all").to(self.device)
 
         self.stylegan_generator = stylegan_generator.to(self.device)
         self.discr = discr.to(self.device)
@@ -42,8 +44,8 @@ class Trainer(object):
 
         for epoch in range(self.config.num_epochs):
             print(f'epoch = {epoch}')
-            self.evaluate(epoch)
             self.train_epoch(epoch)
+            self.evaluate(epoch)
 
     def generator_step(self, data):
         s_img, s_code, s_map, s_lmk, t_img, t_code, t_map, t_lmk, t_mask, s_index, t_index = data
@@ -75,23 +77,25 @@ class Trainer(object):
         fusion_code = self.mapping_network(fusion_code.view(fusion_code.size(0), -1), 2)
         fusion_code = fusion_code.view(t_frame_code.size())
 
-        source_feas = self.stylegan_generator([fusion_code],
-                                              input_is_latent=True, randomize_noise=False)
+        source_feas, side = self.stylegan_generator([fusion_code],
+                                                    input_is_latent=True, randomize_noise=False)
+        
         target_feas = self.target_encoder(t_img)
 
         blend_img = self.decoder(source_feas, target_feas, t_mask)
 
         return {
-            'fake_disc_out': ...,
+            'fake_disc_out': self.discr(blend_img),
             'source': s_img,
             'target': t_img,
+            'side': side,
             'final': blend_img,
         }
 
-    def discriminator_step(self, data):
+    def discriminator_step(self, blend_img, t_img):
         return {
-            'fake_disc_out': ...,
-            'real_disc_out': ...,
+            'fake_disc_out': self.discr(blend_img.detach()),
+            'real_disc_out': self.discr(t_img),
         }
 
     def train_epoch(self, epoch):
@@ -104,7 +108,7 @@ class Trainer(object):
             self.gen_opt.zero_grad()
 
             loss_g = self.generator_loss(**output)
-            loss_g.backward()
+            loss_g["loss"].backward()
 
             self.gen_opt.step()
             if self.config.scheduler:
@@ -114,10 +118,10 @@ class Trainer(object):
 
             self.discr_opt.zero_grad()
 
-            output = self.discriminator_step(data)
+            output = self.discriminator_step(output['final'], data[4].to(self.device)) # blend_img, t_img
 
             loss_d = self.discriminator_loss(**output)
-            loss_d.backward()
+            loss_d["loss"].backward()
 
             self.discr_opt.step()
             if self.config.scheduler:
@@ -127,7 +131,7 @@ class Trainer(object):
 
             total_loss = {}
             total_loss.update({f'gen/{key}': value for key, value in loss_g.items()})
-            total_loss.update({f'disc/{key}': value for key, value in loss_g.items()})
+            total_loss.update({f'disc/{key}': value for key, value in loss_d.items()})
 
             self.decoder.eval()
 
@@ -138,24 +142,24 @@ class Trainer(object):
                 else:
                     print(step_to_log, total_loss)
 
-            if (iteration + 1) % self.config.model_save_step == 0:
-                gen_path = os.path.join(self.config.model_save_dir,
-                                        self.config.exp_name,
-                                        f'{step_to_log}_generator.pth')
-                gen_path_lattest = os.path.join(self.config.model_save_dir,
-                                                self.config.exp_name,
-                                                f'lattest_generator.pth')
-                torch.save(self.decoder.state_dict(), gen_path)
-                torch.save(self.discr.state_dict(), gen_path_lattest)
+#             if (iteration + 1) % self.config.model_save_step == 0:
+#                 gen_path = os.path.join(self.config.model_save_dir,
+#                                         self.config.exp_name,
+#                                         f'{step_to_log}_generator.pth')
+#                 gen_path_lattest = os.path.join(self.config.model_save_dir,
+#                                                 self.config.exp_name,
+#                                                 f'lattest_generator.pth')
+#                 torch.save(self.decoder.state_dict(), gen_path)
+#                 torch.save(self.discr.state_dict(), gen_path_lattest)
 
-                d_path = os.path.join(self.config.model_save_dir,
-                                      self.config.exp_name,
-                                      f'{step_to_log}_discr.pth')
-                d_path_lattest = os.path.join(self.config.model_save_dir,
-                                              self.config.exp_name,
-                                              f'lattest_generator.pth')
-                torch.save(self.discr.state_dict(), d_path)
-                torch.save(self.discr.state_dict(), d_path_lattest)
+#                 d_path = os.path.join(self.config.model_save_dir,
+#                                       self.config.exp_name,
+#                                       f'{step_to_log}_discr.pth')
+#                 d_path_lattest = os.path.join(self.config.model_save_dir,
+#                                               self.config.exp_name,
+#                                               f'lattest_generator.pth')
+#                 torch.save(self.discr.state_dict(), d_path)
+#                 torch.save(self.discr.state_dict(), d_path_lattest)
                 
                 
     def evaluate(self, epoch):
@@ -193,7 +197,7 @@ class Trainer(object):
             fusion_code = self.mapping_network(fusion_code.view(fusion_code.size(0), -1), 2)
             fusion_code = fusion_code.view(t_frame_code.size())
 
-            source_feas = self.stylegan_generator([fusion_code],
+            source_feas, side = self.stylegan_generator([fusion_code],
                                                   input_is_latent=True, randomize_noise=False)
             target_feas = self.target_encoder(t_img)
 

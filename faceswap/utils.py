@@ -7,7 +7,7 @@ from PIL import Image
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 
-from AdaptiveWingLoss.utils.utils import get_preds_fromhm
+from faceswap.AdaptiveWingLoss.utils.utils import get_preds_fromhm
 
 
 transformer_Arcface = transforms.Compose([

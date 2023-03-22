@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from faceswap.models.encoders.psp_encoders import GradualLandmarkEncoder
-from faceswap.models.stylegan2.model import GPENEncoder, Decoder, Generator
-from faceswap.models.discriminator import Discriminator
+from faceswap.models.stylegan2.model import GPENEncoder, Decoder, Generator, Discriminator
+# from faceswap.models.discriminator import Discriminator
 from faceswap.models.nets import F_mapping
 
 from faceswap.dataset import CelebaHqDataset
@@ -47,7 +47,7 @@ def main(config: DictConfig):
                               shuffle=False)
 
     test_dataloader = DataLoader(dataset=dataset_test,
-                                 batch_size=4,
+                                 batch_size=2,
                                  shuffle=False,
                                  drop_last=False,
                                  num_workers=0)
@@ -65,7 +65,8 @@ def main(config: DictConfig):
 
     stylegan_generator = Generator(config.image_size, config.latent, config.n_mlp)
 
-    discr = Discriminator(input_nc=3, n_layers=5, norm_layer=torch.nn.InstanceNorm2d)
+    #discr = Discriminator(input_nc=3, n_layers=5, norm_layer=torch.nn.InstanceNorm2d)
+    discr = Discriminator(size=1024)
 
     if config.models.pretrained:
         e_ckpt = torch.load(config.models.e_ckpt, map_location=torch.device('cpu'))
