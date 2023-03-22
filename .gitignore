@@ -7,3 +7,5 @@ jupyter_notebooks/
 resulted_imgs/
 wandb/
 faceswap/AdaptiveWingLoss/AWL_detector/
+pretrained/WFLW_4HG.pth
+arcface_model/backbone.pth

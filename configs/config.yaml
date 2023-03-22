@@ -17,8 +17,10 @@ generator_loss:
   losses:
     - ${losses.GenAdversarialLoss}
     - ${losses.ReconstructionLoss}
+    - ${losses.IdentityPreservationLoss}
   coefs:
     - 1
+    - 10
     - 10
 
 discriminator_loss:
