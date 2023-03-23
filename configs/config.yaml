@@ -5,7 +5,7 @@ defaults:
   - losses/discriminator_losses
   - optimizers: adam
   
-exp_name: fs_lsd_2203
+exp_name: fs_lsd_2303
 
 batch_size: 2
 num_workers: 2
@@ -22,11 +22,13 @@ generator_loss:
     - ${losses.ReconstructionLoss}
     - ${losses.IdentityPreservationLoss}
     - ${losses.LandmarkAlignmentLoss}
+    - ${losses.StyleTransferLoss}
   coefs:
     - 1
     - 2
     - 2
     - 2
+    - 0.1
 
 discriminator_loss:
   _target_: faceswap.losses.FinalLoss

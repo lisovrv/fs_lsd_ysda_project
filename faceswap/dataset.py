@@ -97,9 +97,12 @@ class CelebaHqDataset(Dataset):
         t_mask = self.encode_segmentation_rgb(t_mask)
         t_mask = cv2.resize(t_mask, (1024, 1024))
         t_mask = t_mask.transpose((2, 0, 1)).astype(np.float) / 255.0
+        # print('0', t_mask.shape)
         t_mask = t_mask[0] + t_mask[1]
 
         t_mask = cv2.dilate(t_mask, np.ones((50, 50)), borderType=cv2.BORDER_CONSTANT, borderValue=0)
+        
+        # print('1', t_mask.shape)
 
         s_img = self.to_tensor_256(s_img)
         t_img = self.to_tensor_1024(t_img)

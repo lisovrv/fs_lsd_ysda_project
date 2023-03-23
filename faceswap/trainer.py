@@ -69,7 +69,9 @@ class Trainer(object):
         t_frame_code = t_code.to(self.device)
 
         input_map = torch.cat([s_map, t_map], dim=1)
+        # print('2', t_mask.shape)
         t_mask = t_mask.unsqueeze_(1).float()
+        # print('3', t_mask.shape)
 
         t_lmk_code = self.landmark_encoder(input_map)
 
@@ -99,6 +101,7 @@ class Trainer(object):
             'target': t_img,
             'side': side,
             'final': blend_img,
+            't_mask': t_mask,
         }
 
     def discriminator_step(self, blend_img, t_img):

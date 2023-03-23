@@ -22,7 +22,7 @@ from faceswap.trainer import Trainer
 def main(config: DictConfig):
     os.chdir(hydra.utils.get_original_cwd())
     if config.use_wandb:
-        run = wandb.init(config=config, project="fs_lsd_ysda", name="exp_8")
+        run = wandb.init(config=config, project="fs_lsd_ysda", name="exp_8_hm")
         run.log_code("./", include_fn=lambda path: path.endswith(".yaml"))
 
     to_tensor = transforms.Compose([
